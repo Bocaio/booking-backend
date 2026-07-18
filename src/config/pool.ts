@@ -1,13 +1,14 @@
 import { createPool } from "mysql2";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { CONFIGS } from "./index.js";
 
-const caCertPath = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../certs/ca.pem",
-);
+function loadCa(): string {
+  if (!CONFIGS.DB_CA_CERT) {
+    throw new Error(
+      "DB_CA_CERT is not set. Provide the MySQL CA certificate (PEM) via the DB_CA_CERT environment variable.",
+    );
+  }
+  return CONFIGS.DB_CA_CERT.replace(/\\n/g, "\n");
+}
 
 export function getPool() {
   return createPool({
@@ -25,7 +26,7 @@ export function getPool() {
     keepAliveInitialDelay: 0,
     timezone: "Z",
     ssl: {
-      ca: fs.readFileSync(caCertPath),
+      ca: loadCa(),
       rejectUnauthorized: true,
     },
   });

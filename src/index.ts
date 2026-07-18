@@ -15,15 +15,21 @@ import { summaryRouter } from "./routes/summary.js";
 const app = express();
 const port = CONFIGS.PORT;
 
+const corsOrigins = CONFIGS.CORS_ORIGIN.split(",").map((s) => s.trim());
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: corsOrigins.length === 1 ? corsOrigins[0] : corsOrigins,
     credentials: true,
   }),
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
 app.use("/auth", authRouter);
 app.use("/booking", authMiddleware, bookingRouter);

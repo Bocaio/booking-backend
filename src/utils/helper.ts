@@ -36,17 +36,19 @@ export const setAuthCookies = (
   accessToken: string,
   refreshToken: string,
 ) => {
-  const isProducion = CONFIGS.NODE_ENV === "production";
+  const isProduction = CONFIGS.NODE_ENV === "production";
+  const sameSite = isProduction ? "none" : "strict";
+
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
-    secure: isProducion,
-    sameSite: "strict",
+    secure: isProduction,
+    sameSite,
     maxAge: 15 * 60 * 1000,
   });
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    secure: isProducion,
-    sameSite: "strict",
+    secure: isProduction,
+    sameSite,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 };
