@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx --watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "NODE_OPTIONS=--max-old-space-size=460 tsc --incremental",
+    "build": "NODE_OPTIONS=--max-old-space-size=460 tsc",
     "start:dev": "tsx --watch src/index.ts",
     "start:prod": "npm run build && npm start",
     "migrate:up": "tsx src/database/migrator.ts up",
