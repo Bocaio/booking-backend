@@ -8,6 +8,8 @@ import { authRouter } from "./routes/auth.js";
 import { CONFIGS } from "./config/index.js";
 import { bookingRouter } from "./routes/booking.js";
 import authMiddleware from "./middlewares/auth.js";
+import { userRouter } from "./routes/user.js";
+import { roleRouter } from "./routes/role.js";
 
 const app = express();
 const port = CONFIGS.PORT;
@@ -24,6 +26,8 @@ app.use(cookieParser());
 
 app.use("/auth", authRouter);
 app.use("/booking", authMiddleware, bookingRouter);
+app.use("/user", authMiddleware, userRouter);
+app.use("/role", authMiddleware, roleRouter);
 
 app.use(errorMiddleWare);
 

@@ -1,6 +1,5 @@
 import { SuccessMessage } from "../constants/message.js";
 import { IBookingService } from "../service/booking/type.js";
-import { UserPayload } from "../types/JwtPayload.js";
 import { sendSuccess } from "../utils/helper.js";
 import { Request, Response, NextFunction } from "express";
 
