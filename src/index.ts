@@ -10,6 +10,7 @@ import { bookingRouter } from "./routes/booking.js";
 import authMiddleware from "./middlewares/auth.js";
 import { userRouter } from "./routes/user.js";
 import { roleRouter } from "./routes/role.js";
+import { summaryRouter } from "./routes/summary.js";
 
 const app = express();
 const port = CONFIGS.PORT;
@@ -28,6 +29,7 @@ app.use("/auth", authRouter);
 app.use("/booking", authMiddleware, bookingRouter);
 app.use("/user", authMiddleware, userRouter);
 app.use("/role", authMiddleware, roleRouter);
+app.use("/summary", authMiddleware, summaryRouter);
 
 app.use(errorMiddleWare);
 

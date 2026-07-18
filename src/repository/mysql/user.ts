@@ -1,6 +1,6 @@
 import database from "../../config/database.js";
 
-export interface UserWithRole {
+export interface User {
   id: string;
   name: string;
   role_id: number;
@@ -11,8 +11,8 @@ export interface UserWithRole {
 export interface IUserRepository {
   create: (id: string, name: string, roleId: number) => Promise<void>;
   delete: (id: string) => Promise<number>;
-  getById: (id: string) => Promise<UserWithRole | null>;
-  getAll: () => Promise<UserWithRole[]>;
+  getById: (id: string) => Promise<User | null>;
+  getAll: () => Promise<User[]>;
   updateRole: (id: string, roleId: number) => Promise<number>;
 }
 
@@ -45,14 +45,14 @@ class UserRepository implements IUserRepository {
     return Number(result.numDeletedRows);
   };
 
-  getById = async (id: string): Promise<UserWithRole | null> => {
+  getById = async (id: string): Promise<User | null> => {
     const user = await this.baseQuery()
       .where("users.id", "=", id)
       .executeTakeFirst();
     return user ?? null;
   };
 
-  getAll = async (): Promise<UserWithRole[]> => {
+  getAll = async (): Promise<User[]> => {
     return this.baseQuery().orderBy("users.role_id", "asc").execute();
   };
 

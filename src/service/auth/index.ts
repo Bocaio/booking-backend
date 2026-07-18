@@ -1,6 +1,6 @@
 import JWT from "jsonwebtoken";
 import { IAuthService, LoginReturn, Roster } from "./type.js";
-import { IUserRepository, UserWithRole } from "../../repository/mysql/user.js";
+import { IUserRepository, User } from "../../repository/mysql/user.js";
 import { IRefreshTokenRepository } from "../../repository/redis/refresh-token.js";
 import { UserPayload } from "../../types/JwtPayload.js";
 import { CONFIGS } from "../../config/index.js";
@@ -69,7 +69,7 @@ export class AuthService implements IAuthService {
     return JWT.sign(payload, CONFIGS.JWT_SECRET_KEY, { expiresIn });
   }
 
-  private toRoster(user: UserWithRole): Roster {
+  private toRoster(user: User): Roster {
     return {
       id: user.id,
       name: user.name,
