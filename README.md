@@ -1,10 +1,6 @@
 # Booking App — Server
 
-A backend for a **room/resource booking platform** with **role-based access control (RBAC)**, built with **Express 5**, **TypeScript**, **MySQL** (Aiven, TLS), and **Redis**. Users will log in by selecting an account (no password), and every action is gated by fine-grained permissions attached to their role.
-
-> **Project status — early scaffolding.**
-> The infrastructure and data layers are in place: TLS MySQL connection, Kysely query builder, migrations + seed data, Redis client, JWT auth middleware, global error middleware, repositories, and Zod validation helpers.
-> **The HTTP layer (controllers, routes, services) is not yet wired.** The server starts, but no application endpoints respond. The `## Planned API` section below documents the intended shape.
+A backend for a **room/resource booking platform** with **role-based access control (RBAC)**, built with **Express 5**, **TypeScript**, **MySQL** (Aiven, TLS), and **Redis**. Users log in by selecting an account (no password); every write action is gated by fine-grained permissions attached to their role.
 
 ---
 
@@ -25,19 +21,34 @@ A backend for a **room/resource booking platform** with **role-based access cont
 
 ---
 
+## Architecture
+
+Layered, dependency-injected:
+
+```
+routes → middlewares → controllers → services → repositories → db/redis
+```
+
+- **`src/routes/*`** — Express routers; attach validation + auth + permission middleware, then delegate to controllers.
+- **`src/controller/*`** — Thin HTTP adapters; unpack `req`, call the service, respond with `sendSuccess`, forward errors to `next()`.
+- **`src/service/*`** — Business logic and rule enforcement (e.g. booking overlap, own-vs-any delete, role existence checks). Depend on repository interfaces.
+- **`src/repository/mysql/*`** — Kysely-typed query wrappers.
+- **`src/repository/redis/*`** — Redis-backed stores (refresh-token set per user).
+- **`src/dependency-injection/*`** — Singletons wire concrete repositories → services → controllers.
+- **`src/middlewares/*`** — `auth` (JWT cookie), `permission` (load codes + `requirePermission(code)` guard), `error` (global handler).
+- **`src/validation/*`** — Zod schemas + `ValidateBody` / `ValidateRouteParams` / `ValidateQueryParams` factories.
+
+---
+
 ## Access Control Model
 
-Permissions are stored in the database and mapped to roles through a many-to-many `role_permissions` table.
+Permissions live in the database, mapped to roles through a `role_permissions` join table. The auth pipeline runs in two steps on protected routes:
 
-**Implemented today:**
+1. **`authMiddleware`** — verifies the `accessToken` cookie and populates `req.user = { userId }`.
+2. **`permissionMiddleware`** — looks up the user's permission codes and populates `req.user.permissions`.
+3. **`requirePermission("<code>")`** — 403s if the required code is missing.
 
-- `authMiddleware` (`src/middlewares/auth.ts`) — verifies the `accessToken` cookie and populates `req.user` with `{ userId, roleId }`.
-- `PermissionRepository.getCodesByRole(roleId)` — returns the permission-code strings for a role.
-
-**Not yet implemented:**
-
-- A permission-guard middleware (e.g. `authorize(code)`) that reads `req.user.roleId`, looks up the codes, and 403s if the required code is missing.
-- Route wiring that would apply the guard.
+Permission codes are centralized in `src/constants/permission.ts` (typed as `PermissionCode`).
 
 ### Seeded roles & permissions (migration `001`)
 
@@ -56,50 +67,60 @@ Each name is unique (`UNIQUE` constraint added to `users.name` in the same migra
 | `U Kyaw`    | `admin` |
 | `Aung Aung` | `owner` |
 | `Zaw Zaw`   | `user`  |
+| `Tun Tun`   | `user`  |
 
 ---
 
-## Planned API
+## API
 
-> These endpoints reflect design intent. **None respond today** — the routes are not registered in `src/index.ts`. Tracking them here so the contract is preserved as controllers/services are added.
+Base URL: `http://localhost:8000` (the port comes from `PORT` in `.env`).
 
-### Auth (`/login`) — no permission required
+All bodies are JSON. Auth cookies (`accessToken`, `refreshToken`) are `httpOnly`, `sameSite=strict`, and `secure` in production.
 
-| Method | Path              | Body       | Description                                   |
-| ------ | ----------------- | ---------- | --------------------------------------------- |
-| GET    | `/login/all`      | —          | List selectable users to log in as            |
-| POST   | `/login`          | `user_id`  | Log in by selecting a user; sets auth cookies |
-| POST   | `/login/refresh`  | — (cookie) | Rotate access + refresh tokens                |
-| POST   | `/login/logout`   | — (cookie) | Revoke refresh token and clear cookies        |
+### Auth (`/auth`) — no permission required
+
+| Method | Path                  | Body      | Description                                            |
+| ------ | --------------------- | --------- | ------------------------------------------------------ |
+| GET    | `/auth/login/roster`  | —         | List selectable users (`id`, `name`, role `label`)     |
+| POST   | `/auth/login`         | `{ id }`  | Log in as the given user id (UUID); sets auth cookies  |
+| POST   | `/auth/login/refresh` | — (cookie)| Rotate access + refresh tokens                         |
+
+Tokens: access token = 15 min, refresh token = 7 days (also tracked in Redis under `refresh_tokens:<userId>` for revocation on refresh).
 
 ### Bookings (`/booking`) — requires auth
 
-| Method | Path              | Permission                                  | Body                     | Description                                            |
-| ------ | ----------------- | ------------------------------------------- | ------------------------ | ------------------------------------------------------ |
-| GET    | `/booking/all`    | `booking.view`                              | —                        | List all bookings; each includes a `canDelete` flag    |
-| POST   | `/booking/create` | `booking.create`                            | `start_time`, `end_time` | Create a booking (ISO 8601 datetimes, `start < end`)   |
-| DELETE | `/booking/delete` | `booking.delete.own` / `booking.delete.any` | `booking_id`             | Delete a booking (own vs. any resolved from ownership) |
+| Method | Path        | Permission                                        | Body                        | Description                                          |
+| ------ | ----------- | ------------------------------------------------- | --------------------------- | ---------------------------------------------------- |
+| GET    | `/booking`  | `booking.view`                                    | —                           | List all bookings (joined with user name)            |
+| POST   | `/booking`  | `booking.create`                                  | `{ start_time, end_time }`  | Create a booking (ISO 8601 w/ offset, `start < end`) |
+| DELETE | `/booking`  | own booking, or `booking.delete.any` for others   | `{ id }`                    | Delete a booking (ownership checked in service)      |
+
+Business rules (enforced in `BookingService`):
+
+- `start_time` must be strictly before `end_time` (else `400 INVALID_TIME_RANGE`).
+- No time-range overlap with any existing booking (else `409 BOOKING_TIME_CONFLICT`).
+- On delete: the owner can always delete their own; anyone else needs `booking.delete.any` (else `403 FORBIDDEN`).
 
 ### Users (`/user`) — requires auth
 
-| Method | Path                | Permission         | Body                 | Description          |
-| ------ | ------------------- | ------------------ | -------------------- | -------------------- |
-| GET    | `/user/all`         | `user.view`        | —                    | List all users       |
-| POST   | `/user/create`      | `user.create`      | `name`, `role_id`    | Create a user        |
-| POST   | `/user/delete`      | `user.delete`      | `user_id`            | Delete a user        |
-| PUT    | `/user/change-role` | `user.update_role` | `user_id`, `role_id` | Change a user's role |
+| Method | Path         | Permission          | Body                     | Description                                              |
+| ------ | ------------ | ------------------- | ------------------------ | -------------------------------------------------------- |
+| GET    | `/user`      | `user.view`         | —                        | List all users (with role name + label)                  |
+| POST   | `/user`      | `user.create`       | `{ name, role_id }`      | Create a user (id = UUIDv7). Validates `role_id` exists. |
+| DELETE | `/user`      | `user.delete`       | `{ id }` (UUID)          | Delete a user by id                                      |
+| PUT    | `/user/role` | `user.update_role`  | `{ user_id, role_id }`   | Change a user's role. Validates both ids.                |
 
 ### Roles (`/role`) — requires auth
 
-| Method | Path        | Permission  | Description    |
-| ------ | ----------- | ----------- | -------------- |
-| GET    | `/role/all` | `role.view` | List all roles |
+| Method | Path    | Permission  | Description    |
+| ------ | ------- | ----------- | -------------- |
+| GET    | `/role` | `role.view` | List all roles |
 
 ---
 
 ## Response Shape
 
-The `sendSuccess` / `sendError` helpers in `src/utils/helper.ts` produce these shapes.
+Produced by `sendSuccess` / `sendError` in `src/utils/helper.ts`.
 
 **Success**
 
@@ -117,56 +138,89 @@ The `sendSuccess` / `sendError` helpers in `src/utils/helper.ts` produce these s
 }
 ```
 
-Possible `error.code` values (see `src/types/response.ts`): `VALIDATION_ERROR`, `DUPLICATE_ENTRY`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `BAD_REQUEST`, `INTERNAL_ERROR`, `SERVICE_UNAVAILABLE`.
+**Validation error** — `error` also includes `fieldErrors`:
+
+```json
+{
+  "success": false,
+  "message": "validation failed",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "fieldErrors": [{ "field": "role_id", "message": "..." }]
+  }
+}
+```
+
+`error.code` values (see `src/types/response.ts`): `VALIDATION_ERROR`, `DUPLICATE_ENTRY`, `INVALID_CREDENTIALS`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `BAD_REQUEST`, `INTERNAL_ERROR`, `SERVICE_UNAVAILABLE`.
+
+The global error middleware (`src/middlewares/error.ts`) maps:
+
+- MySQL errors (`ER_DUP_ENTRY`, `ER_NO_REFERENCED_ROW_2`, `ER_DATA_TOO_LONG`, `ECONNREFUSED`, …) → appropriate HTTP status + `ErrorCode`.
+- `jwt.JsonWebTokenError` / `TokenExpiredError` → 401 `UNAUTHORIZED`.
+- `ValidationError` → `error.statusCode` + `VALIDATION_ERROR` + `fieldErrors`.
+- `AppError` → `error.statusCode` + `BAD_REQUEST`.
+- Anything else → 500 `INTERNAL_ERROR`.
 
 ---
 
 ## Project Structure
 
-Reflects what is currently on disk. Empty/planned directories are omitted.
-
 ```
 backend/
 ├── certs/
-│   └── ca.pem                  # Aiven CA cert (not committed; see setup)
+│   └── ca.pem                  # DB CA cert (not committed; see setup)
 ├── src/
 │   ├── config/
-│   │   ├── index.ts            # Loads .env → CONFIGS (JWT + DB_* + NODE_ENV)
-│   │   ├── pool.ts             # mysql2 pool factory (reads CA from certs/ca.pem)
+│   │   ├── index.ts            # Loads .env → CONFIGS (JWT + DB_* + NODE_ENV + PORT)
+│   │   ├── pool.ts             # mysql2 pool factory (TLS, reads certs/ca.pem)
 │   │   ├── database.ts         # Kysely instance wrapping the mysql2 pool
 │   │   └── redis.ts            # Redis client singleton
 │   ├── constants/
 │   │   ├── message.ts          # SuccessMessage / ErrorMessage
-│   │   └── permission.ts       # Permission code constants
+│   │   └── permission.ts       # Permission code constants + PermissionCode type
 │   ├── controller/
-│   │   └── auth.ts             # AuthController (stub)
+│   │   ├── auth.ts             # getRoster, login, refresh
+│   │   ├── booking.ts          # getAll, create, delete
+│   │   ├── user.ts             # getAll, create, delete, updateRole
+│   │   └── role.ts             # getAll
 │   ├── database/
 │   │   ├── migrator.ts         # Migration CLI (up, down, latest, baseline, create)
 │   │   └── migrations/
 │   │       ├── 2026_07_18_001_initial_schema.ts   # Schema + roles/permissions seed
 │   │       └── 2026_07_18_002_add_user_data.ts    # UNIQUE(users.name) + user seed
 │   ├── dependency-injection/
-│   │   └── repositories.ts     # Repository singletons
+│   │   ├── repositories.ts     # Repository singletons
+│   │   ├── services.ts         # Service singletons (wire repos)
+│   │   └── controllers.ts      # Controller singletons (wire services)
 │   ├── middlewares/
 │   │   ├── auth.ts             # JWT auth (accessToken cookie → req.user)
+│   │   ├── permission.ts       # permissionMiddleware + requirePermission(code)
 │   │   └── error.ts            # Global error handler (MySQL, Zod, JWT, AppError)
 │   ├── repository/
 │   │   ├── mysql/
 │   │   │   ├── user.ts         # UserRepository (+ role join view)
-│   │   │   ├── booking.ts      # BookingRepository (+ user join view)
+│   │   │   ├── booking.ts      # BookingRepository (+ user join, overlap query)
 │   │   │   ├── role.ts         # RoleRepository
-│   │   │   └── permission.ts   # Permission codes by role
+│   │   │   └── permission.ts   # Codes by role / by user id
 │   │   └── redis/
 │   │       └── refresh-token.ts# Refresh-token set (7-day TTL, per user)
 │   ├── routes/
-│   │   ├── auth.ts             # Router shell (no handlers registered yet)
-│   │   └── booking.ts          # Router shell (no handlers registered yet)
+│   │   ├── auth.ts             # /auth/login/roster, /auth/login, /auth/login/refresh
+│   │   ├── booking.ts          # /booking (GET, POST, DELETE)
+│   │   ├── user.ts             # /user (GET, POST, DELETE) + PUT /user/role
+│   │   └── role.ts             # /role (GET)
+│   ├── service/
+│   │   ├── auth/               # AuthService — getRoster, login, refresh
+│   │   ├── booking/            # BookingService — getAll, create, delete (RBAC)
+│   │   ├── user/               # UserService — create, delete, getAll, changeRole
+│   │   └── role/               # RoleService — getAll
 │   ├── types/
-│   │   ├── AppError.ts         # Custom error class
-│   │   ├── valideError.ts      # ValidationError class
-│   │   ├── JwtPayload.ts       # UserPayload (userId, roleId)
-│   │   ├── response.ts         # Response types + ErrorCode
-│   │   ├── express.d.ts        # Express Request augmentation (user)
+│   │   ├── AppError.ts         # Base error (statusCode + optional code)
+│   │   ├── valideError.ts      # ValidationError (extends AppError, +fieldErrors)
+│   │   ├── AuthedUser.ts       # { userId, permissions? }
+│   │   ├── JwtPayload.ts       # UserPayload (extends jsonwebtoken.JwtPayload)
+│   │   ├── response.ts         # Response types + ErrorCode enum
+│   │   ├── express.d.ts        # Express Request augmentation (user, validateQuery)
 │   │   └── index.ts            # Kysely DB type definitions
 │   ├── utils/
 │   │   └── helper.ts           # sendSuccess, sendError, setAuthCookies, clearAuthCookies
@@ -175,14 +229,12 @@ backend/
 │   │   ├── auth/               # login schema
 │   │   ├── booking/            # create / delete schemas
 │   │   └── user/               # create / delete / change-role schemas
-│   └── index.ts                # Server entry (routes not yet registered)
+│   └── index.ts                # Server entry — mounts routers, starts server, graceful shutdown
 ├── .env                        # Local env (gitignored)
 ├── package.json
 ├── tsconfig.json
 └── start.sh                    # build + redis-server + dev in one shell
 ```
-
-Not on disk yet (referenced by planned API): `src/service/`, `src/controller/{booking,user,role,health}.ts`, `src/routes/{user,role,health}.ts`, `src/middlewares/authorize.ts`, `src/dependency-injection/{services,controller}.ts`.
 
 ---
 
@@ -225,6 +277,7 @@ At `backend/.env`:
 
 ```
 NODE_ENV=development
+PORT=8000
 JWT_SECRET_KEY=<random 32+ byte hex>
 
 DB_HOST=<your-mysql-host>
@@ -251,8 +304,8 @@ The CA cert is public and safe to commit; the `.env` (which holds credentials) i
 ### 4. Run migrations
 
 ```bash
-npm run migrate:latest       # apply all pending migrations
-npm run migrate:down         # roll back the last one
+npm run migrate:latest             # apply all pending migrations
+npm run migrate:down               # roll back the last one
 npm run migrate:create -- <name>   # scaffold a new migration file
 ```
 
@@ -265,7 +318,7 @@ npm run dev                  # dev only (assumes Redis is already up)
 npm run start:prod           # tsc build + node dist/index.js
 ```
 
-The server listens on **port 8080** and expects a browser client at `http://localhost:5173` (CORS with `credentials: true`).
+The server listens on the port from `PORT` (default in the example `.env`: **8000**) and expects a browser client at `http://localhost:5173` (CORS with `credentials: true`).
 
 ---
 
