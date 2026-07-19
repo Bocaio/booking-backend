@@ -23,8 +23,8 @@ export class BookingController {
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { userId } = req.user!;
-      const { start_time, end_time } = req.body;
-      await this.bookingService.create(userId, start_time, end_time);
+      const { startTime, endTime } = req.body;
+      await this.bookingService.create(userId, startTime, endTime);
       sendSuccess(res, {}, 201, { message: SuccessMessage.BOOKING_CREATED });
     } catch (err) {
       next(err);

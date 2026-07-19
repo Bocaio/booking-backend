@@ -3,7 +3,7 @@ import { ValidateBody } from "../index.js";
 
 const createUserSchema = z.object({
   name: z.string().min(1, "name is required").max(255, "name is too long"),
-  role_id: z.coerce.number().int().positive(),
+  roleId: z.coerce.number().int().positive(),
 });
 
 const deleteUserSchema = z.object({
@@ -11,8 +11,8 @@ const deleteUserSchema = z.object({
 });
 
 const changeRoleSchema = z.object({
-  user_id: z.uuid(),
-  role_id: z.coerce.number().int().positive(),
+  userId: z.uuid(),
+  roleId: z.coerce.number().int().positive(),
 });
 
 export const validateCreateUser = ValidateBody(createUserSchema);

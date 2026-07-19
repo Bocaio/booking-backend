@@ -2,10 +2,10 @@ import { Pagination } from "../../types/response.js";
 
 export interface Booking {
   id: number;
-  user_id: string;
-  user_name: string;
-  start_time: string;
-  end_time: string;
+  userId: string;
+  userName: string;
+  startTime: string;
+  endTime: string;
 }
 
 export interface PaginatedBookings {
@@ -16,13 +16,13 @@ export interface PaginatedBookings {
 export interface IBookingService {
   getAll: (page: number, limit: number) => Promise<PaginatedBookings>;
   create: (
-    user_id: string,
-    start_time: string,
-    end_time: string,
+    userId: string,
+    startTime: string,
+    endTime: string,
   ) => Promise<void>;
   delete: (
-    user_id: string,
-    booking_id: number,
+    userId: string,
+    bookingId: number,
     permission: string[],
   ) => Promise<void>;
 }

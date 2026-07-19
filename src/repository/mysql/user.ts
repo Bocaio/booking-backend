@@ -3,9 +3,9 @@ import database from "../../config/database.js";
 export interface User {
   id: string;
   name: string;
-  role_id: number;
-  role_name: string;
-  role_label: string;
+  roleId: number;
+  roleName: string;
+  roleLabel: string;
 }
 
 export interface IUserRepository {
@@ -24,9 +24,9 @@ class UserRepository implements IUserRepository {
       .select([
         "users.id as id",
         "users.name as name",
-        "users.role_id as role_id",
-        "roles.name as role_name",
-        "roles.label as role_label",
+        "users.role_id as roleId",
+        "roles.name as roleName",
+        "roles.label as roleLabel",
       ]);
   }
 

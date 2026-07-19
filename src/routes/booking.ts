@@ -5,6 +5,7 @@ import {
   requirePermission,
 } from "../middlewares/permission.js";
 import {
+  validateCreateBooking,
   validateDeleteBooking,
   validateGetAllBooking,
 } from "../validation/booking/booking.validation.js";
@@ -21,6 +22,7 @@ router.get(
 
 router.post(
   "/",
+  validateCreateBooking,
   permissionMiddleware,
   requirePermission("booking.create"),
   bookingController.create,

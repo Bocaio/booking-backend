@@ -1,14 +1,14 @@
 export interface User {
   id: string;
   name: string;
-  role_id: number;
-  role_name: string;
-  role_label: string;
+  roleId: number;
+  roleName: string;
+  roleLabel: string;
 }
 
 export interface IUserService {
-  create: (name: string, role_id: number) => Promise<void>;
-  delete: (user_id: string) => Promise<void>;
+  create: (name: string, roleId: number) => Promise<void>;
+  delete: (userId: string) => Promise<void>;
   getAll: () => Promise<User[]>;
-  changeRole: (user_id: string, role_id: number) => Promise<void>;
+  changeRole: (userId: string, roleId: number) => Promise<void>;
 }

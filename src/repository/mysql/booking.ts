@@ -1,13 +1,15 @@
 import database from "../../config/database.js";
-import { Booking } from "../../types/index.js";
 
-export interface BookingWithUser {
+export interface Booking {
   id: number;
-  user_id: string;
-  user_name: string;
-  start_time: Date;
-  end_time: Date;
-  created_at: Date;
+  userId: string;
+  startTime: Date;
+  endTime: Date;
+  createdAt: Date;
+}
+
+export interface BookingWithUser extends Booking {
+  userName: string;
 }
 
 export interface IBookingRepository {
@@ -44,7 +46,13 @@ class BookingRepository implements IBookingRepository {
   getById = async (id: number): Promise<Booking | null> => {
     const booking = await database
       .selectFrom("bookings")
-      .selectAll()
+      .select([
+        "id as id",
+        "user_id as userId",
+        "start_time as startTime",
+        "end_time as endTime",
+        "created_at as createdAt",
+      ])
       .where("id", "=", id)
       .executeTakeFirst();
     return booking ?? null;
@@ -56,11 +64,11 @@ class BookingRepository implements IBookingRepository {
       .innerJoin("users", "users.id", "bookings.user_id")
       .select([
         "bookings.id as id",
-        "bookings.user_id as user_id",
-        "users.name as user_name",
-        "bookings.start_time as start_time",
-        "bookings.end_time as end_time",
-        "bookings.created_at as created_at",
+        "bookings.user_id as userId",
+        "users.name as userName",
+        "bookings.start_time as startTime",
+        "bookings.end_time as endTime",
+        "bookings.created_at as createdAt",
       ])
       .orderBy("bookings.start_time", "asc");
   }

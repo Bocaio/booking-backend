@@ -2,8 +2,8 @@ import z from "zod";
 import { ValidateBody, ValidateQueryParams } from "../index.js";
 
 const createBookingSchema = z.object({
-  start_time: z.iso.datetime({ offset: true }),
-  end_time: z.iso.datetime({ offset: true }),
+  startTime: z.iso.datetime({ offset: true }),
+  endTime: z.iso.datetime({ offset: true }),
 });
 
 const deleteBookingSchema = z.object({

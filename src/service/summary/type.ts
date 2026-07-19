@@ -1,22 +1,22 @@
 interface Total {
-  total_bookings: number;
-  active_users: number;
-  total_booked_minutes: number;
+  totalBookings: number;
+  activeUsers: number;
+  totalBookedMinutes: number;
 }
 
 interface Booking {
   id: number;
-  start_time: string;
-  end_time: string;
-  duration_minutes: number;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
 }
 
 export interface User {
-  user_id: string;
+  userId: string;
   name: string;
-  role_name: string;
-  booking_count: number;
-  booked_minutes: number;
+  roleName: string;
+  bookingCount: number;
+  bookedMinutes: number;
   bookings: Booking[];
 }
 

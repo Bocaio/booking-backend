@@ -19,10 +19,10 @@ export class BookingService implements IBookingService {
     return {
       data: bookings.map((booking) => ({
         id: booking.id,
-        user_id: booking.user_id,
-        user_name: booking.user_name,
-        start_time: booking.start_time.toISOString(),
-        end_time: booking.end_time.toISOString(),
+        userId: booking.userId,
+        userName: booking.userName,
+        startTime: booking.startTime.toISOString(),
+        endTime: booking.endTime.toISOString(),
       })),
       pagination: {
         page,
@@ -34,12 +34,12 @@ export class BookingService implements IBookingService {
   };
 
   create = async (
-    user_id: string,
-    start_time: string,
-    end_time: string,
+    userId: string,
+    startTime: string,
+    endTime: string,
   ): Promise<void> => {
-    const startDate = new Date(start_time);
-    const endDate = new Date(end_time);
+    const startDate = new Date(startTime);
+    const endDate = new Date(endTime);
 
     if (startDate.getTime() >= endDate.getTime()) {
       throw new AppError(400, ErrorMessage.INVALID_TIME_RANGE);
@@ -53,21 +53,21 @@ export class BookingService implements IBookingService {
       throw new AppError(409, ErrorMessage.BOOKING_TIME_CONFLICT);
     }
 
-    await this.bookingRepository.create(user_id, startDate, endDate);
+    await this.bookingRepository.create(userId, startDate, endDate);
   };
 
   delete = async (
-    user_id: string,
-    booking_id: number,
+    userId: string,
+    bookingId: number,
     permission: string[],
   ): Promise<void> => {
-    const booking = await this.bookingRepository.getById(booking_id);
-    if (user_id == booking?.user_id) {
-      await this.bookingRepository.delete(booking_id);
+    const booking = await this.bookingRepository.getById(bookingId);
+    if (userId === booking?.userId) {
+      await this.bookingRepository.delete(bookingId);
       return;
     }
     if (permission.includes(Permission.BOOKING_DELETE_ANY)) {
-      await this.bookingRepository.delete(booking_id);
+      await this.bookingRepository.delete(bookingId);
     } else {
       throw new AppError(403, ErrorMessage.FORBIDDEN);
     }

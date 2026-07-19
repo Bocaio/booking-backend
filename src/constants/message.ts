@@ -28,5 +28,5 @@ export const ErrorMessage = {
     BOOKING_NOT_FOUND: "Booking not found",
     BOOKING_TIME_CONFLICT: "Time slot conflicts with an existing booking",
 
-  INVALID_TIME_RANGE: "start_time must be before end_time",
+  INVALID_TIME_RANGE: "startTime must be before endTime",
 } as const;

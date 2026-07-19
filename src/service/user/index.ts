@@ -17,17 +17,17 @@ export class UserService implements IUserService {
     this.roleRepository = roleRepository;
   }
 
-  create = async (name: string, role_id: number): Promise<void> => {
-    const role = await this.roleRepository.getById(role_id);
+  create = async (name: string, roleId: number): Promise<void> => {
+    const role = await this.roleRepository.getById(roleId);
     if (!role) {
       throw new AppError(404, ErrorMessage.ROLE_NOT_FOUND);
     }
 
-    await this.userRepository.create(uuidv7(), name, role_id);
+    await this.userRepository.create(uuidv7(), name, roleId);
   };
 
-  delete = async (user_id: string): Promise<void> => {
-    const deleted = await this.userRepository.delete(user_id);
+  delete = async (userId: string): Promise<void> => {
+    const deleted = await this.userRepository.delete(userId);
     if (deleted === 0) {
       throw new AppError(404, ErrorMessage.USER_NOT_FOUND);
     }
@@ -37,13 +37,13 @@ export class UserService implements IUserService {
     return this.userRepository.getAll();
   };
 
-  changeRole = async (user_id: string, role_id: number): Promise<void> => {
-    const role = await this.roleRepository.getById(role_id);
+  changeRole = async (userId: string, roleId: number): Promise<void> => {
+    const role = await this.roleRepository.getById(roleId);
     if (!role) {
       throw new AppError(404, ErrorMessage.ROLE_NOT_FOUND);
     }
 
-    const updated = await this.userRepository.updateRole(user_id, role_id);
+    const updated = await this.userRepository.updateRole(userId, roleId);
     if (updated === 0) {
       throw new AppError(404, ErrorMessage.USER_NOT_FOUND);
     }

@@ -1,6 +1,6 @@
 import { IBookingRepository } from "../../repository/mysql/booking.js";
 import { IUserRepository } from "../../repository/mysql/user.js";
-import { ISummaryService, Summary } from "./type.js";
+import { ISummaryService, Summary, User } from "./type.js";
 
 export class SummaryService implements ISummaryService {
   private readonly userRepository: IUserRepository;
@@ -9,55 +9,55 @@ export class SummaryService implements ISummaryService {
     userRepository: IUserRepository,
     bookingRepository: IBookingRepository,
   ) {
-    ((this.userRepository = userRepository),
-      (this.bookingRepository = bookingRepository));
+    this.userRepository = userRepository;
+    this.bookingRepository = bookingRepository;
   }
 
   get = async (): Promise<Summary> => {
     const bookings = await this.bookingRepository.getAll();
     const users = await this.userRepository.getAll();
-    const map = new Map(
+    const map = new Map<string, User>(
       users
-        .map((u) => ({
-          user_id: u.id,
+        .map<User>((u) => ({
+          userId: u.id,
           name: u.name,
-          role_name: u.role_name,
-          booking_count: 0,
-          booked_minutes: 0,
-          bookings: [] as any[],
+          roleName: u.roleName,
+          bookingCount: 0,
+          bookedMinutes: 0,
+          bookings: [],
         }))
-        .map((u) => [u.user_id, u]),
+        .map((u) => [u.userId, u]),
     );
 
     for (const booking of bookings) {
-      const entry = map.get(booking.user_id);
+      const entry = map.get(booking.userId);
       if (!entry) continue;
       const durationMinutes = Math.round(
-        (new Date(booking.end_time).getTime() -
-          new Date(booking.start_time).getTime()) /
+        (new Date(booking.endTime).getTime() -
+          new Date(booking.startTime).getTime()) /
           60000,
       );
       entry.bookings.push({
         id: booking.id,
-        startTime: new Date(booking.start_time).toISOString(),
-        endTime: new Date(booking.end_time).toISOString(),
+        startTime: new Date(booking.startTime).toISOString(),
+        endTime: new Date(booking.endTime).toISOString(),
         durationMinutes,
       });
-      entry.booking_count += 1;
-      entry.booked_minutes += durationMinutes;
+      entry.bookingCount += 1;
+      entry.bookedMinutes += durationMinutes;
     }
 
     const usersSummary = [...map.values()].sort(
-      (a, b) => b.booking_count - a.booking_count,
+      (a, b) => b.bookingCount - a.bookingCount,
     );
 
     return {
       total: {
-        total_bookings: bookings.length,
-        active_users: usersSummary.filter((user) => user.booking_count > 0)
+        totalBookings: bookings.length,
+        activeUsers: usersSummary.filter((user) => user.bookingCount > 0)
           .length,
-        total_booked_minutes: usersSummary.reduce(
-          (a, c) => a + c.booked_minutes,
+        totalBookedMinutes: usersSummary.reduce(
+          (a, c) => a + c.bookedMinutes,
           0,
         ),
       },

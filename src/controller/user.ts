@@ -10,8 +10,8 @@ export class UserController {
   }
   create = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { name, role_id } = req.body;
-      await this.userService.create(name, role_id);
+      const { name, roleId } = req.body;
+      await this.userService.create(name, roleId);
       sendSuccess(res, {}, 201, { message: SuccessMessage.USER_CREATED });
     } catch (err) {
       next(err);
@@ -39,8 +39,8 @@ export class UserController {
 
   updateRole = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { user_id, role_id } = req.body;
-      await this.userService.changeRole(user_id, role_id);
+      const { userId, roleId } = req.body;
+      await this.userService.changeRole(userId, roleId);
       sendSuccess(res, {}, 200, { message: SuccessMessage.USER_ROLE_UPDATED });
     } catch (err) {
       next(err);

@@ -33,7 +33,7 @@ class PermissionRepository implements IPermissionRepository {
         "permissions.id",
         "role_permissions.permission_id",
       )
-      .select(["users.id as user_id", "permissions.code as code"])
+      .select(["users.id as userId", "permissions.code as code"])
       .where("users.id", "=", userId)
       .execute();
 
