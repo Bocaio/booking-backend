@@ -1,5 +1,8 @@
 interface Total {
   totalBookings: number;
+  totalPastBookings: number;
+  totalCurrentBookings: number;
+  totalUpcomingBookings: number;
   activeUsers: number;
   totalBookedMinutes: number;
 }

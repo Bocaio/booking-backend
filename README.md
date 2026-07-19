@@ -77,44 +77,113 @@ Base URL: `http://localhost:8000` (the port comes from `PORT` in `.env`).
 
 All bodies are JSON. Auth cookies (`accessToken`, `refreshToken`) are `httpOnly`, `sameSite=strict`, and `secure` in production.
 
-### Auth (`/auth`) — no permission required
+### Auth (`/auth`)
 
-| Method | Path                  | Body      | Description                                            |
-| ------ | --------------------- | --------- | ------------------------------------------------------ |
-| GET    | `/auth/login/roster`  | —         | List selectable users (`id`, `name`, role `label`)     |
-| POST   | `/auth/login`         | `{ id }`  | Log in as the given user id (UUID); sets auth cookies  |
-| POST   | `/auth/login/refresh` | — (cookie)| Rotate access + refresh tokens                         |
+None of these require a permission code. Access-token auth (`authMiddleware`) is only enforced on `GET /auth/me`; the rest are either public or cookie-based.
 
-Tokens: access token = 15 min, refresh token = 7 days (also tracked in Redis under `refresh_tokens:<userId>` for revocation on refresh).
+| Method | Path                  | Body / Cookie              | Description                                             |
+| ------ | --------------------- | -------------------------- | ------------------------------------------------------- |
+| GET    | `/auth/login/roster`  | —                          | List selectable users (`id`, `name`, role `label`)      |
+| POST   | `/auth/login`         | `{ id }`                   | Log in as the given user id (UUID); sets auth cookies   |
+| POST   | `/auth/login/refresh` | cookie `refreshToken`      | Rotate access + refresh tokens                          |
+| POST   | `/auth/logout`        | cookie `refreshToken`      | Revoke the refresh token in Redis and clear both auth cookies |
+| GET    | `/auth/me`            | — (requires access cookie) | Return the current user (`id`, `name`, role `label`)    |
+
+Tokens: access token = 15 min, refresh token = 7 days (also tracked in Redis under `refresh_tokens:<userId>` for revocation on refresh/logout).
 
 ### Bookings (`/booking`) — requires auth
 
-| Method | Path        | Permission                                        | Body                        | Description                                          |
-| ------ | ----------- | ------------------------------------------------- | --------------------------- | ---------------------------------------------------- |
-| GET    | `/booking`  | `booking.view`                                    | —                           | List all bookings (joined with user name)            |
-| POST   | `/booking`  | `booking.create`                                  | `{ start_time, end_time }`  | Create a booking (ISO 8601 w/ offset, `start < end`) |
-| DELETE | `/booking`  | own booking, or `booking.delete.any` for others   | `{ id }`                    | Delete a booking (ownership checked in service)      |
+| Method | Path       | Permission                                      | Body / Query                    | Description                                             |
+| ------ | ---------- | ----------------------------------------------- | ------------------------------- | ------------------------------------------------------- |
+| GET    | `/booking` | `booking.view`                                  | query: `page?`, `limit?`        | Paginated list of bookings (joined with user name)      |
+| POST   | `/booking` | `booking.create`                                | `{ startTime, endTime }` (ISO)  | Create a booking (`userId` is taken from the auth cookie) |
+| DELETE | `/booking` | own booking, or `booking.delete.any` for others | `{ id }`                        | Delete a booking (ownership checked in service)         |
 
 Business rules (enforced in `BookingService`):
 
-- `start_time` must be strictly before `end_time` (else `400 INVALID_TIME_RANGE`).
+**Create**
+
+- Times are ISO 8601 with offset (e.g. `2026-08-01T09:00:00+07:00`).
+- `startTime` must not be in the past (else `400 BOOKING_IN_PAST`).
+- `startTime` must be strictly before `endTime` (else `400 INVALID_TIME_RANGE`).
 - No time-range overlap with any existing booking (else `409 BOOKING_TIME_CONFLICT`).
-- On delete: the owner can always delete their own; anyone else needs `booking.delete.any` (else `403 FORBIDDEN`).
+
+**Delete**
+
+- A booking that is currently in progress (`startTime <= now < endTime`) cannot be deleted — by anyone, including holders of `booking.delete.any` (else `409 BOOKING_IN_PROGRESS`).
+- Otherwise the owner may always delete their own; any other user needs `booking.delete.any` (else `403 FORBIDDEN`).
 
 ### Users (`/user`) — requires auth
 
-| Method | Path         | Permission          | Body                     | Description                                              |
-| ------ | ------------ | ------------------- | ------------------------ | -------------------------------------------------------- |
-| GET    | `/user`      | `user.view`         | —                        | List all users (with role name + label)                  |
-| POST   | `/user`      | `user.create`       | `{ name, role_id }`      | Create a user (id = UUIDv7). Validates `role_id` exists. |
-| DELETE | `/user`      | `user.delete`       | `{ id }` (UUID)          | Delete a user by id                                      |
-| PUT    | `/user/role` | `user.update_role`  | `{ user_id, role_id }`   | Change a user's role. Validates both ids.                |
+| Method | Path         | Permission         | Body                   | Description                                             |
+| ------ | ------------ | ------------------ | ---------------------- | ------------------------------------------------------- |
+| GET    | `/user`      | `user.view`        | —                      | List all users (with role name + label)                 |
+| POST   | `/user`      | `user.create`      | `{ name, roleId }`     | Create a user (id = UUIDv7). Validates `roleId` exists. |
+| DELETE | `/user`      | `user.delete`      | `{ id }` (UUID)        | Delete a user by id                                     |
+| PUT    | `/user/role` | `user.update_role` | `{ userId, roleId }`   | Change a user's role. Validates both ids.               |
 
 ### Roles (`/role`) — requires auth
 
 | Method | Path    | Permission  | Description    |
 | ------ | ------- | ----------- | -------------- |
 | GET    | `/role` | `role.view` | List all roles |
+
+### Summary (`/summary`) — requires auth
+
+| Method | Path       | Permission     | Description                                          |
+| ------ | ---------- | -------------- | ---------------------------------------------------- |
+| GET    | `/summary` | `summary.view` | Aggregated usage stats + per-user booking breakdown  |
+
+**Response shape** (`data`):
+
+- `total`
+  - `totalBookings` — every booking on the system
+  - `totalPastBookings` — bookings where `endTime <= now`
+  - `totalCurrentBookings` — in progress: `startTime <= now < endTime`
+  - `totalUpcomingBookings` — `now < startTime`
+  - `activeUsers` — number of users with ≥ 1 booking
+  - `totalBookedMinutes` — sum of every booking's duration in minutes
+- `users[]` — sorted by `bookingCount` desc. Each entry:
+  - `userId`, `name`, `roleName`
+  - `bookingCount`, `bookedMinutes`
+  - `bookings[]` — each with `id`, `startTime`, `endTime` (ISO 8601, UTC), `durationMinutes`
+
+The three counters (`totalPastBookings` + `totalCurrentBookings` + `totalUpcomingBookings`) always sum to `totalBookings`.
+
+Example:
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": {
+      "totalBookings": 12,
+      "totalPastBookings": 7,
+      "totalCurrentBookings": 1,
+      "totalUpcomingBookings": 4,
+      "activeUsers": 3,
+      "totalBookedMinutes": 720
+    },
+    "users": [
+      {
+        "userId": "0192...uuid",
+        "name": "U Kyaw",
+        "roleName": "admin",
+        "bookingCount": 5,
+        "bookedMinutes": 300,
+        "bookings": [
+          {
+            "id": 42,
+            "startTime": "2026-07-19T09:00:00.000Z",
+            "endTime": "2026-07-19T10:00:00.000Z",
+            "durationMinutes": 60
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -146,7 +215,7 @@ Produced by `sendSuccess` / `sendError` in `src/utils/helper.ts`.
   "message": "validation failed",
   "error": {
     "code": "VALIDATION_ERROR",
-    "fieldErrors": [{ "field": "role_id", "message": "..." }]
+    "fieldErrors": [{ "field": "roleId", "message": "..." }]
   }
 }
 ```
@@ -179,15 +248,17 @@ backend/
 │   │   ├── message.ts          # SuccessMessage / ErrorMessage
 │   │   └── permission.ts       # Permission code constants + PermissionCode type
 │   ├── controller/
-│   │   ├── auth.ts             # getRoster, login, refresh
+│   │   ├── auth.ts             # getRoster, login, refresh, logout, me
 │   │   ├── booking.ts          # getAll, create, delete
 │   │   ├── user.ts             # getAll, create, delete, updateRole
-│   │   └── role.ts             # getAll
+│   │   ├── role.ts             # getAll
+│   │   └── summary.ts          # get
 │   ├── database/
 │   │   ├── migrator.ts         # Migration CLI (up, down, latest, baseline, create)
 │   │   └── migrations/
-│   │       ├── 2026_07_18_001_initial_schema.ts   # Schema + roles/permissions seed
-│   │       └── 2026_07_18_002_add_user_data.ts    # UNIQUE(users.name) + user seed
+│   │       ├── 2026_07_18_001_initial_schema.ts        # Schema + roles/permissions seed
+│   │       ├── 2026_07_18_002_add_user_data.ts         # UNIQUE(users.name) + user seed
+│   │       └── 2026_07_19_003_add_bookings_user_fk.ts  # FK bookings.user_id → users.id ON DELETE CASCADE
 │   ├── dependency-injection/
 │   │   ├── repositories.ts     # Repository singletons
 │   │   ├── services.ts         # Service singletons (wire repos)
@@ -205,15 +276,17 @@ backend/
 │   │   └── redis/
 │   │       └── refresh-token.ts# Refresh-token set (7-day TTL, per user)
 │   ├── routes/
-│   │   ├── auth.ts             # /auth/login/roster, /auth/login, /auth/login/refresh
+│   │   ├── auth.ts             # /auth/login/roster, /auth/login, /auth/login/refresh, /auth/logout, /auth/me
 │   │   ├── booking.ts          # /booking (GET, POST, DELETE)
 │   │   ├── user.ts             # /user (GET, POST, DELETE) + PUT /user/role
-│   │   └── role.ts             # /role (GET)
+│   │   ├── role.ts             # /role (GET)
+│   │   └── summary.ts          # /summary (GET)
 │   ├── service/
-│   │   ├── auth/               # AuthService — getRoster, login, refresh
-│   │   ├── booking/            # BookingService — getAll, create, delete (RBAC)
+│   │   ├── auth/               # AuthService — getRoster, login, refresh, logout, me
+│   │   ├── booking/            # BookingService — getAll, create, delete (RBAC + past/in-progress rules)
 │   │   ├── user/               # UserService — create, delete, getAll, changeRole
-│   │   └── role/               # RoleService — getAll
+│   │   ├── role/               # RoleService — getAll
+│   │   └── summary/            # SummaryService — get (aggregated stats + per-user breakdown)
 │   ├── types/
 │   │   ├── AppError.ts         # Base error (statusCode + optional code)
 │   │   ├── valideError.ts      # ValidationError (extends AppError, +fieldErrors)

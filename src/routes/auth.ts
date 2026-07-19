@@ -9,6 +9,6 @@ router.get("/login/roster", authController.getRoster);
 router.post("/login", validateLogin, authController.login);
 router.post("/login/refresh", authController.refresh);
 router.post("/logout", authController.logout);
-router.get("/", authMiddleware, authController.me);
+router.get("/me", authMiddleware, authController.me);
 
 export { router as authRouter };
