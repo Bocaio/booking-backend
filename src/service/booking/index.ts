@@ -41,6 +41,10 @@ export class BookingService implements IBookingService {
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
 
+    if (startDate.getTime() < Date.now()) {
+      throw new AppError(400, ErrorMessage.BOOKING_IN_PAST);
+    }
+
     if (startDate.getTime() >= endDate.getTime()) {
       throw new AppError(400, ErrorMessage.INVALID_TIME_RANGE);
     }
@@ -62,6 +66,16 @@ export class BookingService implements IBookingService {
     permission: string[],
   ): Promise<void> => {
     const booking = await this.bookingRepository.getById(bookingId);
+
+    if (booking) {
+      const now = Date.now();
+      const started = booking.startTime.getTime() <= now;
+      const ended = booking.endTime.getTime() <= now;
+      if (started && !ended) {
+        throw new AppError(409, ErrorMessage.BOOKING_IN_PROGRESS);
+      }
+    }
+
     if (userId === booking?.userId) {
       await this.bookingRepository.delete(bookingId);
       return;

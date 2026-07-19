@@ -29,4 +29,6 @@ export const ErrorMessage = {
     BOOKING_TIME_CONFLICT: "Time slot conflicts with an existing booking",
 
   INVALID_TIME_RANGE: "startTime must be before endTime",
+  BOOKING_IN_PAST: "Booking cannot start in the past",
+  BOOKING_IN_PROGRESS: "Cannot delete a booking that is currently in progress",
 } as const;
