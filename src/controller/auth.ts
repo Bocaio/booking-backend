@@ -52,4 +52,26 @@ export class AuthController {
       next(err);
     }
   };
+
+  logout = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const token = req.cookies?.refreshToken;
+      await this.authService.logout(token);
+      clearAuthCookies(res);
+      sendSuccess(res, {}, 200, { message: SuccessMessage.LOGOUT_SUCCESS });
+    } catch (err) {
+      clearAuthCookies(res);
+      next(err);
+    }
+  };
+
+  me = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId } = req.user!;
+      const data = await this.authService.me(userId);
+      sendSuccess(res, data, 200);
+    } catch (err) {
+      next(err);
+    }
+  };
 }

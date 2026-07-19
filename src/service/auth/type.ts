@@ -12,4 +12,6 @@ export interface IAuthService {
   getRoster: () => Promise<Roster[]>;
   login: (id: string) => Promise<LoginReturn>;
   refresh: (token: string) => Promise<LoginReturn>;
+  logout: (token: string | undefined) => Promise<void>;
+  me: (userId: string) => Promise<Roster>;
 }

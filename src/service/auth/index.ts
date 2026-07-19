@@ -64,6 +64,20 @@ export class AuthService implements IAuthService {
     };
   };
 
+  logout = async (token: string | undefined): Promise<void> => {
+    if (!token) return;
+    const payload = JWT.verify(token, CONFIGS.JWT_SECRET_KEY) as UserPayload;
+    await this.refreshTokenRepository.delete(payload.userId, token);
+  };
+
+  me = async (userId: string): Promise<Roster> => {
+    const user = await this.userRepository.getById(userId);
+    if (!user) {
+      throw new AppError(401, ErrorMessage.UNAUTHORIZED);
+    }
+    return this.toRoster(user);
+  };
+
   private signToken(userId: string, expiresIn: "15m" | "7d"): string {
     const payload: UserPayload = { userId };
     return JWT.sign(payload, CONFIGS.JWT_SECRET_KEY, { expiresIn });
