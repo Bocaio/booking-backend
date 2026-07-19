@@ -15,6 +15,8 @@ export interface IBookingRepository {
   delete: (id: number) => Promise<number>;
   getById: (id: number) => Promise<Booking | null>;
   getAll: () => Promise<BookingWithUser[]>;
+  getPage: (offset: number, limit: number) => Promise<BookingWithUser[]>;
+  count: () => Promise<number>;
   hasOverlap: (startTime: Date, endTime: Date) => Promise<boolean>;
 }
 
@@ -48,7 +50,7 @@ class BookingRepository implements IBookingRepository {
     return booking ?? null;
   };
 
-  getAll = async (): Promise<BookingWithUser[]> => {
+  private baseListQuery() {
     return database
       .selectFrom("bookings")
       .innerJoin("users", "users.id", "bookings.user_id")
@@ -60,8 +62,26 @@ class BookingRepository implements IBookingRepository {
         "bookings.end_time as end_time",
         "bookings.created_at as created_at",
       ])
-      .orderBy("bookings.start_time", "asc")
-      .execute();
+      .orderBy("bookings.start_time", "asc");
+  }
+
+  getAll = async (): Promise<BookingWithUser[]> => {
+    return this.baseListQuery().execute();
+  };
+
+  getPage = async (
+    offset: number,
+    limit: number,
+  ): Promise<BookingWithUser[]> => {
+    return this.baseListQuery().offset(offset).limit(limit).execute();
+  };
+
+  count = async (): Promise<number> => {
+    const row = await database
+      .selectFrom("bookings")
+      .select((eb) => eb.fn.countAll<number>().as("total"))
+      .executeTakeFirst();
+    return Number(row?.total ?? 0);
   };
 
   hasOverlap = async (startTime: Date, endTime: Date): Promise<boolean> => {

@@ -4,12 +4,16 @@ import {
   permissionMiddleware,
   requirePermission,
 } from "../middlewares/permission.js";
-import { validateDeleteBooking } from "../validation/booking/booking.validation.js";
+import {
+  validateDeleteBooking,
+  validateGetAllBooking,
+} from "../validation/booking/booking.validation.js";
 
 const router = Router();
 
 router.get(
   "/",
+  validateGetAllBooking,
   permissionMiddleware,
   requirePermission("booking.view"),
   bookingController.getAll,

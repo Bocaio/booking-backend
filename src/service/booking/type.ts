@@ -1,3 +1,5 @@
+import { Pagination } from "../../types/response.js";
+
 export interface Booking {
   id: number;
   user_id: string;
@@ -6,8 +8,13 @@ export interface Booking {
   end_time: string;
 }
 
+export interface PaginatedBookings {
+  data: Booking[];
+  pagination: Pagination;
+}
+
 export interface IBookingService {
-  getAll: () => Promise<Booking[]>;
+  getAll: (page: number, limit: number) => Promise<PaginatedBookings>;
   create: (
     user_id: string,
     start_time: string,

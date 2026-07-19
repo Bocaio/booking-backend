@@ -10,8 +10,12 @@ export class BookingController {
   }
   getAll = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const data = await this.bookingService.getAll();
-      sendSuccess(res, data, 200);
+      const { page, limit } = req.validateQuery!;
+      const { data, pagination } = await this.bookingService.getAll(
+        Number(page),
+        Number(limit),
+      );
+      sendSuccess(res, data, 200, { pagination });
     } catch (err) {
       next(err);
     }

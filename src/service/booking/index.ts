@@ -1,8 +1,7 @@
 import { IBookingRepository } from "../../repository/mysql/booking.js";
 import { AppError } from "../../types/AppError.js";
 import { ErrorMessage } from "../../constants/message.js";
-import { Booking, IBookingService } from "./type.js";
-import { requirePermission } from "../../middlewares/permission.js";
+import { IBookingService, PaginatedBookings } from "./type.js";
 import { Permission } from "../../constants/permission.js";
 
 export class BookingService implements IBookingService {
@@ -10,15 +9,28 @@ export class BookingService implements IBookingService {
   constructor(bookingRepository: IBookingRepository) {
     this.bookingRepository = bookingRepository;
   }
-  getAll = async (): Promise<Booking[]> => {
-    const bookings = await this.bookingRepository.getAll();
-    return bookings.map((booking) => ({
-      id: booking.id,
-      user_id: booking.user_id,
-      user_name: booking.user_name,
-      start_time: booking.start_time.toISOString(),
-      end_time: booking.end_time.toISOString(),
-    }));
+  getAll = async (page: number, limit: number): Promise<PaginatedBookings> => {
+    const offset = (page - 1) * limit;
+    const [bookings, total] = await Promise.all([
+      this.bookingRepository.getPage(offset, limit),
+      this.bookingRepository.count(),
+    ]);
+
+    return {
+      data: bookings.map((booking) => ({
+        id: booking.id,
+        user_id: booking.user_id,
+        user_name: booking.user_name,
+        start_time: booking.start_time.toISOString(),
+        end_time: booking.end_time.toISOString(),
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
   };
 
   create = async (
