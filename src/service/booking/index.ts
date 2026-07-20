@@ -86,17 +86,14 @@ export class BookingService implements IBookingService {
       }
     }
 
-    if (userId === booking?.userId) {
-      if (permission.includes(Permission.BOOKING_DELETE_OWN)) {
-        await this.bookingRepository.delete(bookingId);
-      } else {
-        throw new AppError(403, ErrorMessage.FORBIDDEN);
-      }
-    }
-    if (permission.includes(Permission.BOOKING_DELETE_ANY)) {
+    const isOwner = booking?.userId === userId;
+    const canDeleteAny = permission.includes(Permission.BOOKING_DELETE_ANY);
+    const canDeleteOwn = permission.includes(Permission.BOOKING_DELETE_OWN);
+    if (canDeleteAny || (isOwner && canDeleteOwn)) {
       await this.bookingRepository.delete(bookingId);
-    } else {
-      throw new AppError(403, ErrorMessage.FORBIDDEN);
+      return;
     }
+
+    throw new AppError(403, ErrorMessage.FORBIDDEN);
   };
 }
