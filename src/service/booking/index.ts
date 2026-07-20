@@ -81,6 +81,9 @@ export class BookingService implements IBookingService {
       if (started && !ended) {
         throw new AppError(409, ErrorMessage.BOOKING_IN_PROGRESS);
       }
+      if (started && ended) {
+        throw new AppError(409, ErrorMessage.BOOKING_DELETE_IN_PAST);
+      }
     }
 
     if (userId === booking?.userId) {

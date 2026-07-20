@@ -24,7 +24,6 @@ export const ErrorMessage = {
   SERVICE_UNAVAILABLE: "Service temporarily unavailable",
   VALIDATION_FAILED: "Validation failed",
   INPUT_TOO_LONG: "Your input is too long",
-  TOO_LONG_SESSION: `You can't take more than ${BOOKING_RULES.MAX_BOOKING_HR} hours`,
 
   UNAUTHORIZED: "Unauthorized",
   FORBIDDEN: "You do not have permission to perform this action",
@@ -37,4 +36,6 @@ export const ErrorMessage = {
   INVALID_TIME_RANGE: "startTime must be before endTime",
   BOOKING_IN_PAST: "Booking cannot start in the past",
   BOOKING_IN_PROGRESS: "Cannot delete a booking that is currently in progress",
+  BOOKING_DELETE_IN_PAST: "Cannot delete a booking that is already finished",
+  TOO_LONG_SESSION: `You can't take more than ${BOOKING_RULES.MAX_BOOKING_HR} hours`,
 } as const;
