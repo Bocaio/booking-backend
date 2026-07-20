@@ -1,15 +1,35 @@
 import database from "../../config/database.js";
+import { Permission } from "../../types/index.js";
 
 export interface CodesByUser {
   codes: string[];
 }
 
 export interface IPermissionRepository {
+  getAll: () => Promise<Permission[]>;
+  getById: (id: number) => Promise<Permission | null>;
   getCodesByRole: (roleId: number) => Promise<string[]>;
   getCodesByUserId: (userId: string) => Promise<CodesByUser>;
 }
 
 class PermissionRepository implements IPermissionRepository {
+  getAll = async (): Promise<Permission[]> => {
+    return database
+      .selectFrom("permissions")
+      .selectAll()
+      .orderBy("id", "asc")
+      .execute();
+  };
+
+  getById = async (id: number): Promise<Permission | null> => {
+    const permission = await database
+      .selectFrom("permissions")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+    return permission ?? null;
+  };
+
   getCodesByRole = async (roleId: number): Promise<string[]> => {
     const rows = await database
       .selectFrom("role_permissions")

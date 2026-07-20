@@ -9,6 +9,7 @@ export const Permission = {
   USER_DELETE: "user.delete",
   USER_UPDATE_ROLE: "user.update_role",
   ROLE_VIEW: "role.view",
+  ROLE_MUTATE: "role.mutate",
 } as const;
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission];

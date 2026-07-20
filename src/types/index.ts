@@ -49,6 +49,9 @@ export type Role = Selectable<RoleTable>;
 export type NewRole = Insertable<RoleTable>;
 
 export type Permission = Selectable<PermissionTable>;
+export interface RoleWithPermissions extends Role {
+  permissions: Permission[];
+}
 
 export type User = Selectable<UserTable>;
 export type NewUser = Insertable<UserTable>;

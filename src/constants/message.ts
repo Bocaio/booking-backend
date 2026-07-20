@@ -15,6 +15,9 @@ export const SuccessMessage = {
   BOOKING_CREATED: "Booking created successfully",
   BOOKING_DELETED: "Booking deleted successfully",
 
+  ROLE_PERMISSION_ADDED: "Permission added to role successfully",
+  ROLE_PERMISSION_DELETED: "Permission removed from role successfully",
+
   HEALTH_OK: "Service is healthy",
 } as const;
 
@@ -31,6 +34,8 @@ export const ErrorMessage = {
   DELETE_SELF: "You can't delete yourself",
   USER_NOT_FOUND: "User not found",
   ROLE_NOT_FOUND: "Role not found",
+  PERMISSION_NOT_FOUND: "Permission not found",
+  ADMIN_ROLE_LOCKED: "Admin role permissions cannot be modified",
   BOOKING_NOT_FOUND: "Booking not found",
   BOOKING_TIME_CONFLICT: "Time slot conflicts with an existing booking",
 
