@@ -87,8 +87,11 @@ export class BookingService implements IBookingService {
     }
 
     if (userId === booking?.userId) {
-      await this.bookingRepository.delete(bookingId);
-      return;
+      if (permission.includes(Permission.BOOKING_DELETE_OWN)) {
+        await this.bookingRepository.delete(bookingId);
+      } else {
+        throw new AppError(403, ErrorMessage.FORBIDDEN);
+      }
     }
     if (permission.includes(Permission.BOOKING_DELETE_ANY)) {
       await this.bookingRepository.delete(bookingId);

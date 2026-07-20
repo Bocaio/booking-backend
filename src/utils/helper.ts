@@ -31,29 +31,38 @@ export const sendError = (
   res.status(statusCode).send(body);
 };
 
+const getAuthCookieOptions = () => {
+  const isProduction = CONFIGS.NODE_ENV === "production";
+  const sameSite: "none" | "strict" = isProduction ? "none" : "strict";
+
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite,
+    path: "/",
+  } as const;
+};
+
 export const setAuthCookies = (
   res: Response,
   accessToken: string,
   refreshToken: string,
 ) => {
-  const isProduction = CONFIGS.NODE_ENV === "production";
-  const sameSite = isProduction ? "none" : "strict";
+  const baseOptions = getAuthCookieOptions();
 
   res.cookie("accessToken", accessToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite,
+    ...baseOptions,
     maxAge: 15 * 60 * 1000,
   });
   res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite,
+    ...baseOptions,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 };
 
 export const clearAuthCookies = (res: Response) => {
-  res.clearCookie("accessToken");
-  res.clearCookie("refreshToken");
+  const baseOptions = getAuthCookieOptions();
+
+  res.clearCookie("accessToken", baseOptions);
+  res.clearCookie("refreshToken", baseOptions);
 };
