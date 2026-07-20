@@ -28,6 +28,7 @@ export const ErrorMessage = {
   UNAUTHORIZED: "Unauthorized",
   FORBIDDEN: "You do not have permission to perform this action",
 
+  DELETE_SELF: "You can't delete yourself",
   USER_NOT_FOUND: "User not found",
   ROLE_NOT_FOUND: "Role not found",
   BOOKING_NOT_FOUND: "Booking not found",

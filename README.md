@@ -1,6 +1,51 @@
-# Booking App — Server
+# Meeting Room Booking System — Backend
 
-A backend for a **room/resource booking platform** with **role-based access control (RBAC)**, built with **Express 5**, **TypeScript**, **MySQL** (Aiven, TLS), and **Redis**. Users log in by selecting an account (no password); every write action is gated by fine-grained permissions attached to their role.
+> **Technical Assessment Submission**
+>
+> This repository is the backend for the **Meeting Room Booking System** assignment: a small web application that manages bookings for a single shared meeting room, with three roles (`admin`, `owner`, `user`), role-based permissions enforced server-side, overlap-safe booking rules, and administrative user management. Time budget: **3 days**. Frontend lives in a sibling `frontend/` project.
+
+The service is **Express 5 + TypeScript** on **Node.js 22 (ESM)**, backed by **MySQL 8** (via Kysely) and **Redis** (refresh-token store). Users log in by selecting an account (no password) — every write action is gated by fine-grained permissions attached to their role.
+
+---
+
+## Assumptions & Design Decisions
+
+Called out here because the assignment explicitly asks for them.
+
+- **Time handling.** All API times are ISO 8601 with an offset (e.g. `2026-08-01T09:00:00+07:00`). They are parsed into JS `Date` objects and stored as MySQL `DATETIME(3)` (millisecond precision, server-side UTC). Times are always compared as absolute instants — never as local strings.
+- **Overlap semantics — half-open intervals `[start, end)`.** `end` is exclusive, so a booking ending at `11:00` does **not** conflict with one starting at `11:00`. **Back-to-back bookings are allowed**; identical, partial, and fully-contained overlaps are rejected. Enforced by a single SQL predicate: `start_time < :newEnd AND end_time > :newStart` (see [`BookingRepository.hasOverlap`](src/repository/mysql/booking.ts)).
+- **Auth model.** Roster-based login (pick a seeded user) — no password. On login the backend issues a 15-minute JWT access cookie and a 7-day refresh cookie (tracked in Redis, revocable on refresh/logout). This is intentionally not production-grade, per the spec, but the identity in `req.user.userId` is trusted server-side and every write is gated by a permission code.
+- **Deleting a user.** Cascade delete: `bookings.user_id` has `ON DELETE CASCADE` (migration `003`), so removing a user removes all of their bookings in the same transaction. Admins are told this in the confirm dialog on the frontend.
+- **Deleting a booking that has started.** `BookingService.delete` refuses to delete a booking currently **in progress** (`start <= now < end` → `409 BOOKING_IN_PROGRESS`) or already **finished** (`end <= now` → `409 BOOKING_DELETE_IN_PAST`), for **any** caller including Admin/Owner. This goes slightly beyond the spec — a design choice to preserve history and avoid mid-meeting deletions.
+- **Booking length cap.** Bookings are capped at 6 hours (`BOOKING_RULES.MAX_BOOKING_MS`) to prevent accidental all-day locks. Rejected with `400 TOO_LONG_SESSION`.
+
+---
+
+## Assignment Requirements → Where They Live
+
+| Requirement (from the spec)                                                                   | Where it's implemented                                                                                                                   |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **NodeJS backend HTTP API**                                                                   | `src/index.ts` (Express 5)                                                                                                               |
+| **User** entity `{ id, name, role }`                                                          | `users` table (migration `001`) + `UserRepository`                                                                                       |
+| **Booking** entity `{ id, userId, startTime, endTime, createdAt }`                            | `bookings` table (migration `001`) + `BookingRepository`                                                                                 |
+| **Three roles** — admin / owner / user                                                        | `roles` table, seeded in migration `001`; users seeded in migration `002`                                                                |
+| **startTime < endTime**                                                                       | `BookingService.create` (`INVALID_TIME_RANGE`) **+** DB `CHECK (start_time < end_time)`                                                  |
+| **No overlaps** (identical / partial / contained / back-to-back)                              | `BookingRepository.hasOverlap` — half-open interval predicate                                                                            |
+| **Clear error responses**                                                                     | `AppError` + `ValidationError` → global `errorMiddleware` → JSON envelope with `error.code`                                              |
+| **User can:** create booking / view all / delete own                                          | Permissions `booking.create`, `booking.view`, `booking.delete.own`                                                                       |
+| **User cannot:** delete others' / manage users                                                | Enforced in `BookingService.delete` (ownership check) + absence of `user.*` codes on the `user` role                                     |
+| **Owner can:** create / view all / delete any / view grouped-by-user / view summary           | `booking.delete.any` + `summary.view`; `/summary` returns aggregate `total` **and** per-user `users[].bookings[]`                        |
+| **Owner cannot:** create/delete users / change roles                                          | Absence of `user.create`, `user.delete`, `user.update_role` on `owner`                                                                   |
+| **Admin can:** create/delete users, change roles, view all users/bookings, delete any booking | Full permission set on `admin` role (migration `001`)                                                                                    |
+| **User management API (admin)**                                                               | `POST /user`, `DELETE /user`, `PUT /user/role`, `GET /user`                                                                              |
+| **Booking creation**                                                                          | `POST /booking`                                                                                                                          |
+| **Booking deletion with permission rules server-side**                                        | `DELETE /booking` — `permissionMiddleware` + service-level owner-vs-any check                                                            |
+| **List bookings / list users**                                                                | `GET /booking` (paginated), `GET /user`                                                                                                  |
+| **Summary / aggregation endpoint (owner + admin)**                                            | `GET /summary` — `SummaryService.get`                                                                                                    |
+| **All permission checks enforced in the backend**                                             | `authMiddleware` → `permissionMiddleware` → `requirePermission("code")` on every protected route; ownership on delete inside the service |
+| **Deleting a user — defined behavior**                                                        | `ON DELETE CASCADE` on `bookings.user_id` (migration `003`) — deletes the user's bookings                                                |
+
+Frontend requirements (role display, booking CRUD UI, admin-only user management, error surfacing) are covered by the sibling `frontend/` Next.js app, which talks to this API.
 
 ---
 
@@ -58,19 +103,6 @@ Permission codes are centralized in `src/constants/permission.ts` (typed as `Per
 | owner | `booking.create`, `booking.view`, `booking.delete.own`, `booking.delete.any`, `summary.view`, `user.view`, `role.view`                                                   |
 | user  | `booking.create`, `booking.view`, `booking.delete.own`                                                                                                                   |
 
-### Seeded users (migration `002`)
-
-Each name is unique (`UNIQUE` constraint added to `users.name` in the same migration). IDs are UUIDv7 generated at migration time.
-
-| Name        | Role    |
-| ----------- | ------- |
-| `U Kyaw`    | `admin` |
-| `Aung Aung` | `owner` |
-| `Zaw Zaw`   | `user`  |
-| `Tun Tun`   | `user`  |
-
----
-
 ## API
 
 Base URL: `http://localhost:8000` (the port comes from `PORT` in `.env`).
@@ -81,23 +113,23 @@ All bodies are JSON. Auth cookies (`accessToken`, `refreshToken`) are `httpOnly`
 
 None of these require a permission code. Access-token auth (`authMiddleware`) is only enforced on `GET /auth/me`; the rest are either public or cookie-based.
 
-| Method | Path                  | Body / Cookie              | Description                                             |
-| ------ | --------------------- | -------------------------- | ------------------------------------------------------- |
-| GET    | `/auth/login/roster`  | —                          | List selectable users (`id`, `name`, role `label`)      |
-| POST   | `/auth/login`         | `{ id }`                   | Log in as the given user id (UUID); sets auth cookies   |
-| POST   | `/auth/login/refresh` | cookie `refreshToken`      | Rotate access + refresh tokens                          |
+| Method | Path                  | Body / Cookie              | Description                                                   |
+| ------ | --------------------- | -------------------------- | ------------------------------------------------------------- |
+| GET    | `/auth/login/roster`  | —                          | List selectable users (`id`, `name`, role `label`)            |
+| POST   | `/auth/login`         | `{ id }`                   | Log in as the given user id (UUID); sets auth cookies         |
+| POST   | `/auth/login/refresh` | cookie `refreshToken`      | Rotate access + refresh tokens                                |
 | POST   | `/auth/logout`        | cookie `refreshToken`      | Revoke the refresh token in Redis and clear both auth cookies |
-| GET    | `/auth/me`            | — (requires access cookie) | Return the current user (`id`, `name`, role `label`)    |
+| GET    | `/auth/me`            | — (requires access cookie) | Return the current user (`id`, `name`, role `label`)          |
 
 Tokens: access token = 15 min, refresh token = 7 days (also tracked in Redis under `refresh_tokens:<userId>` for revocation on refresh/logout).
 
 ### Bookings (`/booking`) — requires auth
 
-| Method | Path       | Permission                                      | Body / Query                    | Description                                             |
-| ------ | ---------- | ----------------------------------------------- | ------------------------------- | ------------------------------------------------------- |
-| GET    | `/booking` | `booking.view`                                  | query: `page?`, `limit?`        | Paginated list of bookings (joined with user name)      |
-| POST   | `/booking` | `booking.create`                                | `{ startTime, endTime }` (ISO)  | Create a booking (`userId` is taken from the auth cookie) |
-| DELETE | `/booking` | own booking, or `booking.delete.any` for others | `{ id }`                        | Delete a booking (ownership checked in service)         |
+| Method | Path       | Permission                                      | Body / Query                   | Description                                               |
+| ------ | ---------- | ----------------------------------------------- | ------------------------------ | --------------------------------------------------------- |
+| GET    | `/booking` | `booking.view`                                  | query: `page?`, `limit?`       | Paginated list of bookings (joined with user name)        |
+| POST   | `/booking` | `booking.create`                                | `{ startTime, endTime }` (ISO) | Create a booking (`userId` is taken from the auth cookie) |
+| DELETE | `/booking` | own booking, or `booking.delete.any` for others | `{ id }`                       | Delete a booking (ownership checked in service)           |
 
 Business rules (enforced in `BookingService`):
 
@@ -115,12 +147,12 @@ Business rules (enforced in `BookingService`):
 
 ### Users (`/user`) — requires auth
 
-| Method | Path         | Permission         | Body                   | Description                                             |
-| ------ | ------------ | ------------------ | ---------------------- | ------------------------------------------------------- |
-| GET    | `/user`      | `user.view`        | —                      | List all users (with role name + label)                 |
-| POST   | `/user`      | `user.create`      | `{ name, roleId }`     | Create a user (id = UUIDv7). Validates `roleId` exists. |
-| DELETE | `/user`      | `user.delete`      | `{ id }` (UUID)        | Delete a user by id                                     |
-| PUT    | `/user/role` | `user.update_role` | `{ userId, roleId }`   | Change a user's role. Validates both ids.               |
+| Method | Path         | Permission         | Body                 | Description                                             |
+| ------ | ------------ | ------------------ | -------------------- | ------------------------------------------------------- |
+| GET    | `/user`      | `user.view`        | —                    | List all users (with role name + label)                 |
+| POST   | `/user`      | `user.create`      | `{ name, roleId }`   | Create a user (id = UUIDv7). Validates `roleId` exists. |
+| DELETE | `/user`      | `user.delete`      | `{ id }` (UUID)      | Delete a user by id                                     |
+| PUT    | `/user/role` | `user.update_role` | `{ userId, roleId }` | Change a user's role. Validates both ids.               |
 
 ### Roles (`/role`) — requires auth
 
@@ -130,9 +162,9 @@ Business rules (enforced in `BookingService`):
 
 ### Summary (`/summary`) — requires auth
 
-| Method | Path       | Permission     | Description                                          |
-| ------ | ---------- | -------------- | ---------------------------------------------------- |
-| GET    | `/summary` | `summary.view` | Aggregated usage stats + per-user booking breakdown  |
+| Method | Path       | Permission     | Description                                         |
+| ------ | ---------- | -------------- | --------------------------------------------------- |
+| GET    | `/summary` | `summary.view` | Aggregated usage stats + per-user booking breakdown |
 
 **Response shape** (`data`):
 
@@ -426,15 +458,15 @@ ORDER BY u.name;
 
 ## NPM Scripts
 
-| Script                     | Description                                                    |
-| -------------------------- | -------------------------------------------------------------- |
-| `npm run dev`              | Start server with hot reload (`tsx --watch src/index.ts`)      |
-| `npm run start:dev`        | Alias of `dev`                                                 |
-| `npm run build`            | Compile TypeScript to `dist/`                                  |
-| `npm start`                | Run compiled server from `dist/`                               |
-| `npm run start:prod`       | Build + start in production                                    |
-| `npm run migrate:latest`   | Apply all pending migrations                                   |
-| `npm run migrate:up`       | Apply the next pending migration                               |
-| `npm run migrate:down`     | Roll back the last migration                                   |
-| `npm run migrate:baseline` | Mark the initial migration as already applied                  |
-| `npm run migrate:create`   | Scaffold a new migration — `npm run migrate:create -- <name>`  |
+| Script                     | Description                                                   |
+| -------------------------- | ------------------------------------------------------------- |
+| `npm run dev`              | Start server with hot reload (`tsx --watch src/index.ts`)     |
+| `npm run start:dev`        | Alias of `dev`                                                |
+| `npm run build`            | Compile TypeScript to `dist/`                                 |
+| `npm start`                | Run compiled server from `dist/`                              |
+| `npm run start:prod`       | Build + start in production                                   |
+| `npm run migrate:latest`   | Apply all pending migrations                                  |
+| `npm run migrate:up`       | Apply the next pending migration                              |
+| `npm run migrate:down`     | Roll back the last migration                                  |
+| `npm run migrate:baseline` | Mark the initial migration as already applied                 |
+| `npm run migrate:create`   | Scaffold a new migration — `npm run migrate:create -- <name>` |

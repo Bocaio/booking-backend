@@ -8,7 +8,7 @@ export interface User {
 
 export interface IUserService {
   create: (name: string, roleId: number) => Promise<void>;
-  delete: (userId: string) => Promise<void>;
+  delete: (userId: string, deleteUserId: string) => Promise<void>;
   getAll: () => Promise<User[]>;
   changeRole: (userId: string, roleId: number) => Promise<void>;
 }

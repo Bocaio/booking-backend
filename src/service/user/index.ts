@@ -26,8 +26,11 @@ export class UserService implements IUserService {
     await this.userRepository.create(uuidv7(), name, roleId);
   };
 
-  delete = async (userId: string): Promise<void> => {
-    const deleted = await this.userRepository.delete(userId);
+  delete = async (userId: string, deleteUserId: string): Promise<void> => {
+    if (userId === deleteUserId) {
+      throw new AppError(400, ErrorMessage.DELETE_SELF);
+    }
+    const deleted = await this.userRepository.delete(deleteUserId);
     if (deleted === 0) {
       throw new AppError(404, ErrorMessage.USER_NOT_FOUND);
     }
