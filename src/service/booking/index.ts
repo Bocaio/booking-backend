@@ -1,6 +1,6 @@
 import { IBookingRepository } from "../../repository/mysql/booking.js";
 import { AppError } from "../../types/AppError.js";
-import { ErrorMessage } from "../../constants/message.js";
+import { BOOKING_RULES, ErrorMessage } from "../../constants/message.js";
 import { IBookingService, PaginatedBookings } from "./type.js";
 import { Permission } from "../../constants/permission.js";
 
@@ -47,6 +47,13 @@ export class BookingService implements IBookingService {
 
     if (startDate.getTime() >= endDate.getTime()) {
       throw new AppError(400, ErrorMessage.INVALID_TIME_RANGE);
+    }
+
+    if (
+      endDate.getTime() - startDate.getTime() >
+      BOOKING_RULES.MAX_BOOKING_MS
+    ) {
+      throw new AppError(400, ErrorMessage.TOO_LONG_SESSION);
     }
 
     const overlaps = await this.bookingRepository.hasOverlap(

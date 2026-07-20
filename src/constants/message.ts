@@ -1,3 +1,8 @@
+export const BOOKING_RULES = {
+  MAX_BOOKING_HR: 6,
+  MAX_BOOKING_MS: 6 * 60 * 60 * 1000,
+} as const;
+
 export const SuccessMessage = {
   LOGIN_SUCCESS: "Logged in successfully",
   LOGOUT_SUCCESS: "Logged out successfully",
@@ -19,14 +24,15 @@ export const ErrorMessage = {
   SERVICE_UNAVAILABLE: "Service temporarily unavailable",
   VALIDATION_FAILED: "Validation failed",
   INPUT_TOO_LONG: "Your input is too long",
+  TOO_LONG_SESSION: `You can't take more than ${BOOKING_RULES.MAX_BOOKING_HR} hours`,
 
   UNAUTHORIZED: "Unauthorized",
   FORBIDDEN: "You do not have permission to perform this action",
 
   USER_NOT_FOUND: "User not found",
   ROLE_NOT_FOUND: "Role not found",
-    BOOKING_NOT_FOUND: "Booking not found",
-    BOOKING_TIME_CONFLICT: "Time slot conflicts with an existing booking",
+  BOOKING_NOT_FOUND: "Booking not found",
+  BOOKING_TIME_CONFLICT: "Time slot conflicts with an existing booking",
 
   INVALID_TIME_RANGE: "startTime must be before endTime",
   BOOKING_IN_PAST: "Booking cannot start in the past",
